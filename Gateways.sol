@@ -1,4 +1,4 @@
-pragma solidity =0.6.0;
+pragma solidity =0.5.0;
 
 contract Registration {
     
@@ -11,7 +11,7 @@ contract Registration {
     mapping(address=>bool) public clients;
     mapping(address=>gatewaytype) public gateways;
     mapping(uint=>address) public GWcounter;
-    uint constant clientRegisterationFee=1;
+    uint constant clientRegistrationFee=1;
     uint constant GWDeposit=100;
     uint constant penaltyAmount=10;
     uint public validators;
@@ -30,7 +30,7 @@ contract Registration {
         require(!clients[msg.sender] && gateways[msg.sender].rating==0,
         "Address already used");
         
-        require(msg.value==clientRegisterationFee,
+        require(msg.value==clientRegistrationFee,
         "Admission fee incorrect");
         
         clients[msg.sender]=true;
@@ -41,8 +41,8 @@ contract Registration {
         require(!clients[msg.sender] && gateways[msg.sender].rating==0,
         "Address already used");
 
-        require(msg.value==GWDeposit,
-        "Admission fee incorrect");
+        require(msg.value>=GWDeposit,
+        "Deposit insufficient");
 
         gateways[msg.sender]=gatewaytype(80,0,msg.value);
         GWcounter[validators++]=msg.sender;
@@ -124,6 +124,7 @@ contract Validation{
         address client;
         uint requestedValidators;
         uint remainingValidators;
+        uint timestamp;
     }
     
     Registration registrationContract;
@@ -132,10 +133,15 @@ contract Validation{
     uint currentValidator;
     uint constant feePerValidator=5;
     uint constant validationPayment=4;
+    uint constant timeinterval = 360;
+    //uint constant timeinterval = 3600000;
+    
     mapping(address=>uint) public activeValidators;
     
     event ValidationRequired(uint requestNumber,address validator, uint validatorNum);
     event RequestConfirmed(uint requestNumber, address clientAddress);
+    event AttestationReceived(uint requestNumber, address validator);
+    
 
      modifier onlyClient{
       require(registrationContract.clientExists(msg.sender),
@@ -154,30 +160,31 @@ contract Validation{
     constructor(address registrationAddress)public {
         registrationContract=Registration(registrationAddress);
         requestNumber=uint(keccak256(abi.encodePacked(msg.sender,now,address(this))));
+        requestNumber=114305905918518717074458746961843349530610600381688897462260683236346614152598;
         currentValidator=0;
     }
     
-    function requestAttestation(uint numofValidators) public payable onlyClient{
+    function requestAttestation(uint numofValidators, address GW) public payable onlyClient{
         uint availableVals=registrationContract.availableValidators();
         require(availableVals>numofValidators,
         "Number of available validators is insufficient."
         );
         
-        require(attestationRequests[requestNumber].requestedValidators==0,
-        "Attestation already requested by this client."
-        );
+        //require(attestationRequests[requestNumber].requestedValidators==0,
+        //"Attestation already requested by this client."
+        //);
         
         require(msg.value==feePerValidator*numofValidators,
         "Validation Fee incorrect."
         );
-        attestationRequests[requestNumber]=validatorsCount(msg.sender, numofValidators, numofValidators);
+        attestationRequests[requestNumber]=validatorsCount(msg.sender, numofValidators, numofValidators,now);
         registrationContract.decreaseAvailableValidators(numofValidators);
         
         address tempV;
         for(uint i=0;i<numofValidators;i++){
 
             tempV=registrationContract.getGWAddress(currentValidator);
-            if(tempV==msg.sender){
+            if(tempV==GW){
                 tempV=registrationContract.getGWAddress(++currentValidator);
             }
             activeValidators[tempV]=requestNumber;
@@ -196,11 +203,13 @@ contract Validation{
         );
 
         require(activeValidators[msg.sender]==requestNum,
-        "Validator GW is not assigned to this Attestation Request."
+        "Validator is not assigned to this Attestation Request."
         );
         
         msg.sender.transfer(validationPayment);
         
+        emit AttestationReceived(requestNum,msg.sender);
+
         activeValidators[msg.sender]=0;
         attestationRequests[requestNum].remainingValidators--;
         if(attestationRequests[requestNum].remainingValidators==0)
@@ -214,7 +223,7 @@ contract Validation{
         uint temprating=registrationContract.getGWRating(GWAddress);
         uint tempraters=registrationContract.getGWRaters(GWAddress);
         
-        registrationContract.setGWRating(GWAddress,(temprating*tempraters+rating)/tempraters+1);    
+        registrationContract.setGWRating(GWAddress,(temprating*tempraters+rating)/(tempraters+1));    
     }
     
     function reportMissingAttestations(uint requestNum, address validator, uint validatorNum) public onlyClient{
@@ -225,6 +234,9 @@ contract Validation{
         require(attestationRequests[requestNum].client==msg.sender,
         "Client not auhtorized."
         );
+        
+        require(now-attestationRequests[requestNum].timestamp>timeinterval,
+        "Time");
         
         if(attestationRequests[requestNum].remainingValidators!=0){
             registrationContract.increaseAvailableValidators(attestationRequests[requestNum].requestedValidators);
