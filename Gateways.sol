@@ -160,7 +160,6 @@ contract Validation{
     constructor(address registrationAddress)public {
         registrationContract=Registration(registrationAddress);
         requestNumber=uint(keccak256(abi.encodePacked(msg.sender,now,address(this))));
-        requestNumber=114305905918518717074458746961843349530610600381688897462260683236346614152598;
         currentValidator=0;
     }
     
