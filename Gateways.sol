@@ -141,7 +141,7 @@ contract Validation{
     event ValidationRequired(uint requestNumber,address validator, uint validatorNum);
     event RequestConfirmed(uint requestNumber, address clientAddress);
     event AttestationReceived(uint requestNumber, address validator);
-    
+    event GWRatingUpdated(address GWAddress, uint oldRating, uint updatedRating, uint numOfRaters);
 
      modifier onlyClient{
       require(registrationContract.clientExists(msg.sender),
@@ -222,7 +222,10 @@ contract Validation{
         uint temprating=registrationContract.getGWRating(GWAddress);
         uint tempraters=registrationContract.getGWRaters(GWAddress);
         
-        registrationContract.setGWRating(GWAddress,(temprating*tempraters+rating)/(tempraters+1));    
+        uint updatedRating=(temprating*tempraters+rating)/(tempraters+1);
+        registrationContract.setGWRating(GWAddress,updatedRating);    
+        
+        emit GWRatingUpdated(GWAddress, temprating, updatedRating, tempraters);
     }
     
     function reportMissingAttestations(uint requestNum, address validator, uint validatorNum) public onlyClient{
